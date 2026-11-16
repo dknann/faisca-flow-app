@@ -91,7 +91,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 <div id="zoom" hidden><img id="zoomImg" alt="Card em tamanho real"><div class="barra"><button id="zoomBaixar">⬇ Baixar este card</button><button id="zoomFechar">Fechar</button></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 // Gerador local de frases no padrão das referências (CATALOGO_REFERENCIAS.md).
 // Frase = fixa ou molde com {slot}. *palavra* = destaque (negrito/marca-texto/cor, conforme o estilo).
@@ -813,10 +812,12 @@ $('baixarTudo').onclick = async () => {
   const pngs = [];
   for (let i = 0; i < lista.length; i++) pngs.push(new File([await pngDe(lista[i])], String(i + 1).padStart(2, '0') + '.png', { type: 'image/png' }));
   if (!downloads && (await compartilhar(pngs, $('legenda').value))) return; // celular: manda os cards em ordem pra galeria/Instagram
-  const zip = new JSZip();
-  pngs.forEach((f) => zip.file(f.name, f));
-  zip.file('legenda.txt', $('legenda').value);
-  await salvar(`faisca-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}.zip`, await zip.generateAsync({ type: 'blob' }));
+  // Sem zip: cada card sai solto, em ordem (01, 02, 03...)
+  for (const f of pngs) {
+    if (downloads) await salvar(f.name, f);
+    else { baixarDireto(f.name, f); await new Promise((r) => setTimeout(r, 700)); }
+  }
+  status(`${pngs.length} cards salvos em ordem.`);
 };
 let zoomIdx = 0;
 async function abrirZoom(i) {
