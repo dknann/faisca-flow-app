@@ -295,13 +295,31 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   // tipo: 'soltas' | 'carrossel'. Retorna lista de textos (um por card).
   // prontas: frases já criadas pela IA; o que faltar vem do banco.
   // ctaTipo: seguir | salvar | comentar | compartilhar | nenhum
+  // Frase "de mês" ("Nasci em junho, por isso...") só faz sentido num carrossel de meses inteiro
+  const MES_RE = /\bnasc\w*\s+(em|no m[eê]s de)\s+\*?(janeiro|fevereiro|mar[cç]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i;
+
+  // Juiz (a "disputa" do Cut Prime): gera mais candidatas do que o pedido, a IA dá nota a cada uma e ficam as melhores.
+  function montarJuiz(cands, tom, tema) {
+    return ['Você é editor-chefe de uma página brasileira de frases no Instagram que quer viralizar.',
+      `Avalie cada frase candidata para um carrossel${tema ? ` sobre "${tema}"` : ''}${TONS[tom] ? ` (tom ${TONS[tom].nome.toLowerCase()})` : ''}.`,
+      'Nota 0 a 10: 10 = frase completa, faz sentido sozinha, forte, dá vontade de salvar/compartilhar; 0 = sem sentido, cortada, clichê vazio, erro de português, ou repete a ideia de outra da lista.',
+      'Responda SÓ uma linha por frase, exatamente: número|nota', '',
+      ...cands.map((c, i) => `${i + 1}. ${c.replace(/\*/g, '')}`)].join('\n');
+  }
+  // devolve as candidatas da melhor pra pior, sem as de nota < minimo
+  function lerJuiz(txt, cands, minimo = 6) {
+    const nota = new Map();
+    for (const l of txt.split('\n')) { const m = l.match(/^\s*(\d+)\s*[.):|-]\s*(\d{1,2})(?!\d)/); /* aceita "2|9" e "2. 9|motivo" */ if (m && cands[+m[1] - 1] != null) nota.set(+m[1] - 1, +m[2]); }
+    return [...nota].filter(([, n]) => n >= minimo).sort((a, b) => b[1] - a[1]).map(([i]) => cands[i]);
+  }
+
   // Todo post termina com CTA (menos "nenhum"). ctaLugar: 'extra' = card a mais | 'ultimo' = ocupa o último card
-  function gerarLote({ tom, tipo = 'soltas', qtd = 5, capa, cta = true, ctaTipo = 'seguir', ctaLugar = 'extra', prontas = [] }, rnd = Math.random, usadas = new Set()) {
+  function gerarLote({ tom, tipo = 'soltas', qtd = 5, capa, cta = true, ctaTipo = 'seguir', ctaLugar = 'extra', prontas = [], permitirMes = false }, rnd = Math.random, usadas = new Set()) {
     const tons = tom === 'misturar' ? Object.keys(TONS) : [tom];
     // Nunca repete dentro do lote: compara sem acento/pontuação; se o tom acabar, puxa dos outros tons e da base
     const chave = (f) => f.normalize('NFD').replace(/[^a-z ]/gi, '').toLowerCase().replace(/\s+/g, ' ').trim();
     const vistas = new Set(), cards = [];
-    const por = (f) => { const k = chave(f); if (f && !vistas.has(k)) { vistas.add(k); cards.push(f); } };
+    const por = (f) => { const k = chave(f); if (f && !vistas.has(k) && (permitirMes || !MES_RE.test(f))) { vistas.add(k); cards.push(f); } };
     prontas.slice(0, qtd).forEach(por);
     const todos = Object.keys(TONS), extra = Object.values(BASE.frases).flat();
     for (let i = 0; cards.length < qtd && i < qtd * 20; i++) {
@@ -436,7 +454,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       .slice(0, qtd);
   }
 
-  const api = { CTAS_POR_TIPO, serieDeMeses, montarPedidoTematico, lerPedidoTematico, loteDeMeses, CAPAS_GERAIS, juntarBase, BASE, exemplosDaBase, montarPrompt, limparResposta, TONS, CAPAS, CTAS, gerarFrase, gerarLote, gerarLegenda, dividirLote, preencher };
+  const api = { MES_RE, montarJuiz, lerJuiz, CTAS_POR_TIPO, serieDeMeses, montarPedidoTematico, lerPedidoTematico, loteDeMeses, CAPAS_GERAIS, juntarBase, BASE, exemplosDaBase, montarPrompt, limparResposta, TONS, CAPAS, CTAS, gerarFrase, gerarLote, gerarLegenda, dividirLote, preencher };
   if (typeof module !== 'undefined') { try { juntarBase(require('./virais.json'), require('./telegram.json')); } catch {} module.exports = api; } else root.Frases = api;
 })(this);
 
@@ -693,8 +711,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
     const as = Math.round(W * 0.024), baseAt = H - H * 0.055, xAt = st.align === 'left' ? margem : W / 2;
     let txtAt = '', larguraAt = 0;
+    // Marca d'água da página: na Advercase (como os posts), maior e mais elegante; estilos "tweet" mantêm a sans
+    const fonteAt = st.tight ? `600 ${as}px "Inter"` : `400 ${Math.round(as * 1.45)}px "Advercase", "Instrument Serif", serif`;
     if (o.arroba && !st.clube) {
-      ctx.font = `600 ${as}px "Inter"`;
+      ctx.font = fonteAt;
       txtAt = st.tight ? o.arroba.toUpperCase() : o.arroba;
       larguraAt = ctx.measureText(txtAt).width;
     }
@@ -705,7 +725,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       ctx.drawImage(o.logo.img, r.x, r.y, r.w, r.h); // logo original do Ronan, sem alterar
     }
     if (txtAt) {
-      ctx.fillStyle = cor; ctx.globalAlpha = 0.6;
+      ctx.font = fonteAt; ctx.fillStyle = cor; ctx.globalAlpha = st.tight ? 0.6 : 0.82;
       ctx.textAlign = st.align === 'left' ? 'left' : 'center';
       ctx.fillText(txtAt, xAt + deslocaAt + (o.logo?.pos === 'lado' && st.align === 'left' ? as * 1.4 : 0), baseAt);
       ctx.globalAlpha = 1; ctx.textAlign = 'left';
@@ -754,7 +774,7 @@ $('texto').value = salvo.texto || ''; $('legenda').value = salvo.legenda || '';
 $('estilo').onchange = () => { $('fishEye').value = Render.ESTILOS[$('estilo').value].fishEye; desenharTudo(); };
 
 const cards = () => Frases.dividirLote($('texto').value);
-const opcoes = (texto, grande) => ({ texto, estilo: $('estilo').value, formato: $('formato').value, arroba: perfil().arroba, fishEye: +$('fishEye').value, escala: +$('escala').value, logo: { img: perfil().logo ? LOGO : null, pos: $('logoPos').value, tam: 0.04 }, _grande: grande });
+const opcoes = (texto, grande) => ({ texto, estilo: $('estilo').value, formato: $('formato').value, arroba: perfil().arroba, fishEye: +$('fishEye').value, escala: +$('escala').value, logo: { img: perfil().logo && !perfil().semLogo ? LOGO : null, pos: $('logoPos').value, tam: 0.04 }, _grande: grande });
 // Prévia em meia resolução (rápido no celular); download sempre em resolução cheia.
 const FORMATOS_CHEIOS = { ...Render.FORMATOS };
 function desenhar(canvas, texto, grande) {
@@ -800,15 +820,21 @@ function misturarVirais(prontas, tom, tema, qtd) {
 $('gerar').onclick = async () => {
   const tom = $('tom').value, tema = $('tema').value.trim(), qtd = Math.min(20, +$('qtd').value || 6);
   const btn = $('gerar'); btn.disabled = true;
-  let prontas = [];
+  let prontas = [], julgado = false;
   if ($('usarIA').checked && sample) {
     btn.textContent = '⚡ Criando com IA…';
     try {
       const pedido = Frases.montarPrompt({ tom, tema, qtd, curtidas: Frases.exemplosDaBase(tom, tema, 10, Math.random).map((texto) => ({ texto, tom })), recentes: [...usadas].filter((f) => !f.startsWith('c:')) });
-      prontas = Frases.limparResposta((await sample(pedido, { modelTier: 'quick' })).text, qtd);
+      // disputa: a IA cria o dobro, entram virais reais, a IA julga e ficam as melhores
+      const criadas = Frases.limparResposta((await sample(pedido.replace(`Escreva ${qtd} frases`, `Escreva ${qtd * 2} frases`), { modelTier: 'quick' })).text, qtd * 2);
+      const virais = $('misturar').checked ? Frases.exemplosDaBase(tom, tema, qtd * 3, Math.random).filter((f) => !usadas.has(f)).slice(0, qtd) : [];
+      const cands = [...criadas, ...virais].filter((f) => !Frases.MES_RE.test(f));
+      btn.textContent = '⚡ Escolhendo as melhores…';
+      prontas = Frases.lerJuiz((await sample(Frases.montarJuiz(cands, tom, tema), { modelTier: 'quick' })).text, cands).slice(0, qtd);
+      julgado = prontas.length > 0;
     } catch (e) { status(e.code === 'not_granted' ? 'IA não liberada: usei as frases virais e o banco.' : 'A IA não respondeu agora: usei as frases virais e o banco.'); }
   }
-  const lote = Frases.gerarLote({ tom, tipo: $('tipo').value, qtd, capa: $('capa').value, ctaTipo: $('ctaTipo').value, ctaLugar: $('ctaLugar').value, prontas: misturarVirais(prontas, tom, tema, qtd) }, Math.random, usadas);
+  const lote = Frases.gerarLote({ tom, tipo: $('tipo').value, qtd, capa: $('capa').value, ctaTipo: $('ctaTipo').value, ctaLugar: $('ctaLugar').value, prontas: julgado ? prontas : misturarVirais(prontas, tom, tema, qtd) }, Math.random, usadas);
   lote.forEach((f) => usadas.add(f));
   $('texto').value = lote.join('\n---\n');
   $('legenda').value = Frases.gerarLegenda(tom, perfil().arroba);
@@ -866,6 +892,7 @@ function mostrarPerfil() {
   const p = perfil(); $('perfil').value = p.id;
   $('pNome').value = p.nome; $('arroba').value = p.arroba; $('perfilNome').textContent = p.nome + (p.arroba ? ' · ' + p.arroba : '');
   $('pLogoPrev').hidden = !p.logo; if (p.logo) $('pLogoPrev').src = p.logo;
+  $('pLogoPrev').style.opacity = p.semLogo ? 0.3 : 1; $('pSemLogo').textContent = p.semLogo ? 'Usar logo' : 'Sem logo'; $('pSemLogo').hidden = !p.logo;
   if (p.logo) { LOGO.onload = desenharTudo; LOGO.src = p.logo; } else desenharTudo();
   if (!p.arroba) $('perfilBox').open = true; // primeira vez: mostra pra pessoa preencher
 }
@@ -879,11 +906,12 @@ $('pLogo').onchange = () => {
   img.onload = () => { // reduz pra caber no armazenamento do navegador (logo aparece pequena no post)
     const k = Math.min(1, 600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
     c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    perfil().logo = c.toDataURL('image/png'); guardarPerfis(); mostrarPerfil(); URL.revokeObjectURL(img.src);
+    perfil().logo = c.toDataURL('image/png'); perfil().semLogo = false; guardarPerfis(); mostrarPerfil(); URL.revokeObjectURL(img.src);
   };
   img.src = URL.createObjectURL(f);
 };
-$('pSemLogo').onclick = () => { perfil().logo = null; guardarPerfis(); mostrarPerfil(); };
+// "Sem logo" só desliga a logo nos posts; a imagem continua guardada pra ligar de novo
+$('pSemLogo').onclick = () => { perfil().semLogo = !perfil().semLogo; guardarPerfis(); mostrarPerfil(); };
 $('pNovo').onclick = () => { const id = 'p' + Date.now(); perfis.lista.push({ id, nome: 'Nova página', arroba: '', logo: null }); perfis.atual = id; guardarPerfis(); mostrarPerfil(); $('pNome').select(); };
 let confirmando = false;
 $('pApagar').onclick = () => {
