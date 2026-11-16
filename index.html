@@ -1,7 +1,7 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png"><meta name="theme-color" content="#ff6b2c"><style>html{color-scheme:light dark}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Faísca Flow</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@500;600;700;800&family=Poppins:wght@700&family=Permanent+Marker&family=Caveat:wght@700&family=Libre+Baskerville:wght@400;700&family=Special+Elite&family=EB+Garamond:wght@600&family=Oswald:wght@600&family=Lilita+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@500;600;700;800&family=Poppins:wght@700;800&family=Permanent+Marker&family=Caveat:wght@700&family=Libre+Baskerville:wght@400;700&family=Special+Elite&family=EB+Garamond:wght@600&family=Oswald:wght@600&family=Lilita+One&display=swap">
 <style>
 /* Layout: uma coluna de controles em cima, cards em grade de 2 embaixo (celular primeiro) */
 :root {
@@ -445,6 +445,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     verdePapel: { nome: 'Verde papel + fish eye', font: 'Advercase", "Instrument Serif', weight: 400, size: 40, color: '#ffffff', bg: '#6cb23c', align: 'center', fishEye: 0.3, mixItalic: 0.25, accent: 'italic', lh: 1.0, grao: true, boxW: 0.6 },
     azulAmarelo: { nome: 'Azul + amarelo', font: 'Advercase", "Instrument Serif', weight: 400, size: 52, color: '#f4f20c', bg: '#2e6fd8', align: 'center', fishEye: 0, accent: 'italic', lh: 1.05, grao: true, boxW: 0.6 },
     antigo: { nome: 'Papel antigo', font: 'Libre Baskerville', weight: 400, size: 76, color: '#7a1414', bg: '#d8ccb4', align: 'center', fishEye: 0, accent: 'bold', lh: 1.3 },
+    clube: { nome: 'Data + frase + SIGA (estilo clube5damanha)', font: 'Poppins', weight: 800, size: 92, color: '#111111', bg: '#ffffff', align: 'left', fishEye: 0, accent: 'none', lh: 1.12, ls: -0.01, clube: true },
     tweet: { nome: 'Tweet claro', font: 'Inter', weight: 800, size: 96, color: '#111111', bg: '#ffffff', align: 'left', fishEye: 0, accent: 'none', lh: 1.08, tight: true },
     tweetEscuro: { nome: 'Tweet escuro', font: 'Inter', weight: 800, size: 96, color: '#ffffff', bg: '#000000', align: 'left', fishEye: 0, accent: 'none', lh: 1.08, tight: true },
     poppins: { nome: 'Bold marrom', font: 'Poppins', weight: 700, size: 86, color: '#8a4b12', bg: '#ebe3d6', align: 'left', fishEye: 0, accent: 'highlight', hl: '#f2a7c3', lh: 1.2 },
@@ -669,9 +670,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     camada.width = camada.height = 0; // libera a memória da camada (celular trava/reduz com muitos canvas)
     ctx.restore();
 
+    // Estilo clube: data do dia em cima e "SIGA @..." logo abaixo da frase, cinza, caixa alta, alinhados ao texto
+    if (st.clube) {
+      const pq = Math.round(size * 0.3), cinza = '#9b9b9b';
+      ctx.font = `700 ${pq}px "Inter"`; ctx.fillStyle = cinza; ctx.letterSpacing = `${(pq * 0.02).toFixed(1)}px`;
+      const data = (o.data || new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })).toLocaleUpperCase('pt-BR');
+      ctx.fillText(data, minX, topo - pq * 0.9);
+      if (o.arroba) ctx.fillText(('SIGA ' + o.arroba).toLocaleUpperCase('pt-BR'), minX, topo + alturaTxt + pq * 1.6);
+      ctx.letterSpacing = '0px';
+    }
+
     const as = Math.round(W * 0.024), baseAt = H - H * 0.055, xAt = st.align === 'left' ? margem : W / 2;
     let txtAt = '', larguraAt = 0;
-    if (o.arroba) {
+    if (o.arroba && !st.clube) {
       ctx.font = `600 ${as}px "Inter"`;
       txtAt = st.tight ? o.arroba.toUpperCase() : o.arroba;
       larguraAt = ctx.measureText(txtAt).width;
