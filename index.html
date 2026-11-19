@@ -89,7 +89,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <textarea id="texto" rows="8" spellcheck="false"></textarea>
   </details>
 
-  <div class="barra"><span id="status">Gere um post pra começar.</span><span class="grow"></span><button id="baixarTudo">⬇ Salvar carrossel</button></div>
+  <div class="barra"><button class="primario" id="baixarTudo" style="flex:1">⬇ Baixar todas as imagens</button><button id="canvaCel" style="flex:1">🎨 Mandar pro Canva</button></div>
+  <p id="status" style="margin:0">Gere um post pra começar.</p>
+  <p style="margin:0;color:var(--mut);font-size:12px">Cada card sai como uma imagem separada, em ordem (01, 02, 03…), sem zip. Pra baixar só um, toque no card.</p>
   <div id="cards"></div>
 
   <details open>
@@ -320,11 +322,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     const chave = (f) => f.normalize('NFD').replace(/[^a-z ]/gi, '').toLowerCase().replace(/\s+/g, ' ').trim();
     const vistas = new Set(), cards = [];
     const por = (f) => { const k = chave(f); if (f && !vistas.has(k) && (permitirMes || !MES_RE.test(f))) { vistas.add(k); cards.push(f); } };
-    prontas.slice(0, qtd).forEach(por);
-    const todos = Object.keys(TONS), extra = Object.values(BASE.frases).flat();
-    for (let i = 0; cards.length < qtd && i < qtd * 20; i++) {
+    prontas.filter((f) => !usadas.has(f)).slice(0, qtd).forEach(por);
+    // Nunca repete entre gerações: o que já saiu (usadas) não volta. Banco do tom acabou → outros tons → base de virais.
+    const todos = Object.keys(TONS), antes = new Set(usadas);
+    const extra = Object.values(BASE.frases).flat().filter((f) => !antes.has(f));
+    for (let i = 0; cards.length < qtd && i < qtd * 30; i++) {
       const lista = i < qtd * 8 ? tons : todos;
-      por(i < qtd * 14 || !extra.length ? gerarFrase(lista[i % lista.length], rnd, usadas) : extra[Math.floor(rnd() * extra.length)]);
+      let f = i < qtd * 14 ? gerarFrase(lista[i % lista.length], rnd, usadas) : null;
+      if ((!f || antes.has(f)) && extra.length) f = extra.splice(Math.floor(rnd() * extra.length), 1)[0];
+      if (f && !antes.has(f)) { por(f); usadas.add(f); }
     }
     if (tipo === 'carrossel') cards.unshift(capa || pick(CAPAS[tons[0]].concat(CAPAS_GERAIS), rnd));
     if (cta && CTAS_POR_TIPO[ctaTipo]) {
@@ -470,21 +476,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     papel: { nome: 'Papel + fish eye', font: 'Advercase", "Instrument Serif', grao: true, weight: 400, size: 120, color: '#141414', bg: '#ece6da', align: 'center', fishEye: 0.35, mixItalic: 0.2, accent: 'italic', lh: 1.0 },
     chapado: { nome: 'Cor chapada', font: 'Advercase", "Instrument Serif', grao: true, weight: 400, size: 116, color: '#ffffff', bg: '#2f6bd6', align: 'center', fishEye: 0.2, mixItalic: 0.25, accent: 'italic', lh: 1.02 },
     azulPapel: { nome: 'Azul papel (caixa alta)', font: 'Advercase", "Instrument Serif', weight: 400, size: 48, color: '#ffffff', bg: '#2e6fd8', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.12, grao: true, boxW: 0.5 },
-    verdePapel: { nome: 'Verde papel + fish eye', font: 'Advercase", "Instrument Serif', weight: 400, size: 40, color: '#ffffff', bg: '#6cb23c', align: 'center', fishEye: 0.3, mixItalic: 0.25, accent: 'italic', lh: 1.0, grao: true, boxW: 0.6 },
-    azulAmarelo: { nome: 'Azul + amarelo', font: 'Advercase", "Instrument Serif', weight: 400, size: 52, color: '#f4f20c', bg: '#2e6fd8', align: 'center', fishEye: 0, accent: 'italic', lh: 1.05, grao: true, boxW: 0.6 },
-    antigo: { nome: 'Papel antigo', font: 'Libre Baskerville', weight: 400, size: 76, color: '#7a1414', bg: '#d8ccb4', align: 'center', fishEye: 0, accent: 'bold', lh: 1.3 },
+    verdePapel: { nome: 'Verde papel + fish eye', font: 'Advercase", "Instrument Serif', weight: 400, size: 54, color: '#ffffff', bg: '#6cb23c', align: 'center', fishEye: 0.3, mixItalic: 0.25, accent: 'italic', lh: 1.0, grao: true, boxW: 0.6 },
+    azulAmarelo: { nome: 'Azul + amarelo', font: 'Advercase", "Instrument Serif', weight: 400, size: 62, color: '#f4f20c', bg: '#2e6fd8', align: 'center', fishEye: 0, accent: 'italic', lh: 1.05, grao: true, boxW: 0.6 },
+    antigo: { nome: 'Papel antigo', font: 'Libre Baskerville', weight: 400, size: 76, color: '#7a1414', bg: '#d8ccb4', align: 'center', fishEye: 0, accent: 'bold', lh: 1.3, grao: true },
     clube: { nome: 'Data + frase + SIGA (estilo clube5damanha)', font: 'Poppins', weight: 800, size: 92, color: '#111111', bg: '#ffffff', align: 'left', fishEye: 0, accent: 'none', lh: 1.12, ls: -0.01, clube: true },
     tweet: { nome: 'Tweet claro', font: 'Inter', weight: 800, size: 96, color: '#111111', bg: '#ffffff', align: 'left', fishEye: 0, accent: 'none', lh: 1.08, tight: true },
     tweetEscuro: { nome: 'Tweet escuro', font: 'Inter', weight: 800, size: 96, color: '#ffffff', bg: '#000000', align: 'left', fishEye: 0, accent: 'none', lh: 1.08, tight: true },
-    poppins: { nome: 'Bold marrom', font: 'Poppins', weight: 700, size: 86, color: '#8a4b12', bg: '#ebe3d6', align: 'left', fishEye: 0, accent: 'highlight', hl: '#f2a7c3', lh: 1.2 },
-    pincel: { nome: 'Pincel caixa alta', font: 'Permanent Marker', weight: 400, size: 96, color: '#111111', bg: '#ebe7df', align: 'left', fishEye: 0, caps: true, accent: 'none', lh: 1.12 },
-    pincelCurvo: { nome: 'Pincel + fish eye', font: 'Permanent Marker', weight: 400, size: 92, color: '#1d1d1d', bg: '#e4e4e4', align: 'center', fishEye: 0.45, caps: true, accent: 'color', accentColor: '#6d6d6d', lh: 1.1 },
-    manuscrito: { nome: 'Manuscrito', font: 'Caveat', weight: 700, size: 124, color: '#1e1e1e', bg: '#e8e8e5', align: 'center', fishEye: 0, rotate: -3, accent: 'none', lh: 1.1 },
-    marcaTexto: { nome: 'Marca-texto', font: 'Inter', weight: 800, size: 92, color: '#4a2a0c', bg: '#e8dfd2', align: 'left', fishEye: 0, caps: true, accent: 'highlightAll', hl: '#b5d98c', lh: 1.12, tight: true },
-    capaSerifa: { nome: 'Capa serifa (frases curtas porém profundas)', font: 'EB Garamond', weight: 600, size: 150, color: '#141414', bg: '#f1ece6', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.02 },
-    capaCondensada: { nome: 'Capa condensada (frases difíceis de engolir)', font: 'Oswald', weight: 600, size: 150, color: '#2b2b2b', bg: '#dcdcdc', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.05 },
-    capaDesenho: { nome: 'Capa desenhada (as melhores frases…)', font: 'Lilita One', weight: 400, size: 130, color: '#3b2a1e', bg: '#e9e3da', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.08, stroke: '#f6f1ea', desenhado: true },
-    maquina: { nome: 'Máquina de escrever', font: 'Special Elite', weight: 400, size: 70, color: '#5a3a1a', bg: '#e9e0d1', align: 'left', fishEye: 0, caps: true, accent: 'highlight', hl: '#c4e0a0', lh: 1.45 },
+    poppins: { nome: 'Bold marrom', font: 'Poppins', weight: 700, size: 86, color: '#8a4b12', bg: '#ebe3d6', align: 'left', fishEye: 0, accent: 'highlight', hl: '#f2a7c3', lh: 1.2, grao: true },
+    pincel: { nome: 'Pincel caixa alta', font: 'Permanent Marker', weight: 400, size: 96, color: '#111111', bg: '#ebe7df', align: 'left', fishEye: 0, caps: true, accent: 'none', lh: 1.12, grao: true },
+    pincelCurvo: { nome: 'Pincel + fish eye', font: 'Permanent Marker', weight: 400, size: 92, color: '#1d1d1d', bg: '#e4e4e4', align: 'center', fishEye: 0.45, caps: true, accent: 'color', accentColor: '#6d6d6d', lh: 1.1, grao: true },
+    manuscrito: { nome: 'Manuscrito', font: 'Caveat', weight: 700, size: 124, color: '#1e1e1e', bg: '#e8e8e5', align: 'center', fishEye: 0, rotate: -3, accent: 'none', lh: 1.1, grao: true },
+    marcaTexto: { nome: 'Marca-texto', font: 'Inter', weight: 800, size: 92, color: '#4a2a0c', bg: '#e8dfd2', align: 'left', fishEye: 0, caps: true, accent: 'highlightAll', hl: '#b5d98c', lh: 1.12, tight: true, grao: true },
+    capaSerifa: { nome: 'Capa serifa (frases curtas porém profundas)', font: 'EB Garamond', weight: 600, size: 150, color: '#141414', bg: '#f1ece6', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.02, grao: true },
+    capaCondensada: { nome: 'Capa condensada (frases difíceis de engolir)', font: 'Oswald', weight: 600, size: 150, color: '#2b2b2b', bg: '#dcdcdc', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.05, grao: true },
+    capaDesenho: { nome: 'Capa desenhada (as melhores frases…)', font: 'Lilita One', weight: 400, size: 130, color: '#3b2a1e', bg: '#e9e3da', align: 'center', fishEye: 0, caps: true, accent: 'none', lh: 1.08, stroke: '#f6f1ea', desenhado: true, grao: true },
+    maquina: { nome: 'Máquina de escrever', font: 'Special Elite', weight: 400, size: 70, color: '#5a3a1a', bg: '#e9e0d1', align: 'left', fishEye: 0, caps: true, accent: 'highlight', hl: '#c4e0a0', lh: 1.45, grao: true },
   };
 
   // "Eu *não* ganhei\nfoi" -> [{w,accent}], {br:true} nas quebras de linha
@@ -794,7 +800,8 @@ function desenharTudo() {
       if (!c) { c = document.createElement('canvas'); c.onclick = () => abrirZoom(i); box.appendChild(c); }
       desenhar(c, t, false);
     });
-    status(lista.length ? `${lista.length} cards · toque num card pra ver em tamanho real` : 'Gere um post pra começar.');
+    status(lista.length ? `${lista.length} cards prontos. Toque num card pra ver em tamanho real.` : 'Gere um post pra começar.');
+    $('baixarTudo').textContent = lista.length ? `⬇ Baixar as ${lista.length} imagens` : '⬇ Baixar todas as imagens';
     gravar();
   }, 150);
 }
@@ -865,6 +872,16 @@ async function salvar(filename, data) {
   try { await downloads.save({ filename, data }); status(`Salvo: ${filename}`); }
   catch (e) { status(e.code === 'declined' ? 'Download cancelado.' : e.code === 'rate_limited' ? 'Espere a confirmação anterior e tente de novo.' : 'Não deu pra salvar agora.'); }
 }
+// Canva: abre o "compartilhar" do celular com todas as imagens em ordem; é só escolher o app do Canva na lista
+$('canvaCel').onclick = async () => {
+  const lista = cards(); if (!lista.length) return status('Gere um post primeiro.');
+  status('Montando as imagens…');
+  const pngs = [];
+  for (let i = 0; i < lista.length; i++) pngs.push(new File([await pngDe(lista[i])], String(i + 1).padStart(2, '0') + '.png', { type: 'image/png' }));
+  if (await compartilhar(pngs, $('legenda').value)) return status('Escolha o Canva na lista. As imagens vão na ordem certa.');
+  for (const f of pngs) { if (downloads) await salvar(f.name, f); else { baixarDireto(f.name, f); await new Promise((r) => setTimeout(r, 700)); } }
+  status('Imagens salvas. Abra o Canva e envie as imagens da galeria (já estão em ordem).');
+};
 $('baixarTudo').onclick = async () => {
   const lista = cards(); if (!lista.length) return status('Gere um post primeiro.');
   status('Montando os cards em tamanho real…');
