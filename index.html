@@ -79,6 +79,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       <label>Fish eye <input id="fishEye" type="range" min="0" max="0.8" step="0.05"></label>
       <label>Tamanho do texto <input id="escala" type="range" min="0.6" max="1.4" step="0.05" value="1"></label>
       <label>Logo <select id="logoPos"></select></label>
+      <label class="check" id="fundosBox" hidden><input id="usarFundos" type="checkbox"> Usar fundos prontos</label>
     </div>
   </details>
 
@@ -304,7 +305,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   function montarJuiz(cands, tom, tema) {
     return ['Você é editor-chefe de uma página brasileira de frases no Instagram que quer viralizar.',
       `Avalie cada frase candidata para um carrossel${tema ? ` sobre "${tema}"` : ''}${TONS[tom] ? ` (tom ${TONS[tom].nome.toLowerCase()})` : ''}.`,
-      'Nota 0 a 10: 10 = frase completa, faz sentido sozinha, forte, dá vontade de salvar/compartilhar; 0 = sem sentido, cortada, clichê vazio, erro de português, ou repete a ideia de outra da lista.',
+      'Nota 0 a 10: 10 = frase completa, faz sentido sozinha, forte, dá vontade de salvar/compartilhar; 0 = sem sentido, cortada, clichê vazio, erro de português, ou repete a ideia de outra da lista. Se foi pedido um assunto e a frase não fala dele, nota 0.',
       'Responda SÓ uma linha por frase, exatamente: número|nota', '',
       ...cands.map((c, i) => `${i + 1}. ${c.replace(/\*/g, '')}`)].join('\n');
   }
@@ -316,7 +317,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   }
 
   // Todo post termina com CTA (menos "nenhum"). ctaLugar: 'extra' = card a mais | 'ultimo' = ocupa o último card
-  function gerarLote({ tom, tipo = 'soltas', qtd = 5, capa, cta = true, ctaTipo = 'seguir', ctaLugar = 'extra', prontas = [], permitirMes = false }, rnd = Math.random, usadas = new Set()) {
+  function gerarLote({ tom, tipo = 'soltas', qtd = 5, capa, cta = true, ctaTipo = 'seguir', ctaLugar = 'extra', prontas = [], permitirMes = false, tema = '' }, rnd = Math.random, usadas = new Set()) {
     const tons = tom === 'misturar' ? Object.keys(TONS) : [tom];
     // Nunca repete dentro do lote: compara sem acento/pontuação; se o tom acabar, puxa dos outros tons e da base
     const chave = (f) => f.normalize('NFD').replace(/[^a-z ]/gi, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -325,10 +326,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     prontas.filter((f) => !usadas.has(f)).slice(0, qtd).forEach(por);
     // Nunca repete entre gerações: o que já saiu (usadas) não volta. Banco do tom acabou → outros tons → base de virais.
     const todos = Object.keys(TONS), antes = new Set(usadas);
-    const extra = Object.values(BASE.frases).flat().filter((f) => !antes.has(f));
+    // Com assunto digitado: só completa com frases que falam do assunto (nunca enche com frase aleatória)
+    const temaPal = tema ? [...palavras(tema)] : null;
+    const casaTema = (f) => !temaPal || [...palavras(f)].some((w) => temaPal.some((k) => w.startsWith(k.slice(0, 5))));
+    const extra = Object.values(BASE.frases).flat().filter((f) => !antes.has(f) && casaTema(f));
     for (let i = 0; cards.length < qtd && i < qtd * 30; i++) {
       const lista = i < qtd * 8 ? tons : todos;
-      let f = i < qtd * 14 ? gerarFrase(lista[i % lista.length], rnd, usadas) : null;
+      let f = !temaPal && i < qtd * 14 ? gerarFrase(lista[i % lista.length], rnd, usadas) : null;
       if ((!f || antes.has(f)) && extra.length) f = extra.splice(Math.floor(rnd() * extra.length), 1)[0];
       if (f && !antes.has(f)) { por(f); usadas.add(f); }
     }
@@ -600,6 +604,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   const POS_LOGO = { nenhum: 'Sem logo', baixo: 'Embaixo (acima do @)', lado: 'Junto do @', 'baixo-esq': 'Canto inferior esquerdo', 'baixo-dir': 'Canto inferior direito', topo: 'Topo', 'topo-esq': 'Canto superior esquerdo', 'topo-dir': 'Canto superior direito' };
 
   // Textura de papel (feita uma vez e guardada): manchas suaves + fibras + grão fino, sempre igual.
+  // Claridade média de uma imagem (0 = preta, 1 = branca), calculada 1x por imagem
+  function claridade(im) {
+    if (im._clar != null) return im._clar;
+    const c = document.createElement('canvas'); c.width = c.height = 32;
+    const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0, 32, 32);
+    const d = x.getImageData(0, 0, 32, 32).data; let t = 0;
+    for (let i = 0; i < d.length; i += 4) t += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+    return (im._clar = t / (d.length / 4));
+  }
+
   const texturas = {};
   // Papel em relevo como nas referências: ruído em várias escalas vira um "mapa de altura"
   // e a luz batendo de cima-esquerda cria o relevo (clareia/escurece). Feito 1x por tamanho e reaproveitado.
@@ -656,7 +670,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     if (st.mixItalic) tokens = tokens.map((t) => (t.br ? t : { ...t, italic: rnd() < st.mixItalic }));
     const margem = W * (st.align === 'left' ? 0.09 : 0.12);
     const fe = o.fishEye ?? st.fishEye;
-    const caixa = { w: st.boxW ? W * st.boxW : W - margem * 2, h: (H * (o.formato === '9:16' ? 0.6 : 0.68)) / (1 + fe) }; // fish eye estica o meio
+    const caixa = { w: st.boxW ? W * st.boxW : (W - margem * 2) * (o.fundoImg && o.fundoComMarca ? 0.86 : 1), h: (H * (o.fundoImg && o.fundoComMarca ? 0.5 : o.formato === '9:16' ? 0.6 : 0.68)) / (1 + fe) }; // com fundo pronto: deixa respiro e livra a marca d'água // fish eye estica o meio
     const medirEm = (size) => ({
       medir: (t) => { c.font = fonte(st, t, size); c.letterSpacing = espLetra(st, size); return c.measureText(t.w).width; },
       esp: (c.font = fonte(st, {}, size), c.measureText(' ').width * (st.tight ? 0.9 : st.mixItalic ? 1.2 : 1)),
@@ -665,8 +679,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     const { size, linhas } = ajustar(tokens, caixa, Math.round(st.size * 1.4 * (o.escala || 1) * W / 1080), lhEf, medirEm);
     const { medir, esp } = medirEm(size);
     const lh = size * lhEf, alturaTxt = linhas.length * lh;
-    let y = (H - alturaTxt) / 2 - H * 0.02;
-    const cor = o.cor || st.color;
+    // Fundo pronto (pasta fundos): o texto vai um pouco acima do meio pra não cobrir a marca d'água do fundo
+    const centro = o.fundoImg && o.fundoComMarca ? H * 0.44 : H * 0.48;
+    let y = centro - alturaTxt / 2;
+    // Cor do texto: com foto de fundo, branco ou preto conforme o fundo (claro/escuro), a não ser que você escolha uma
+    const cor = o.cor || (o.fundoImg ? (claridade(o.fundoImg) < 0.62 ? '#ffffff' : '#141414') : st.color);
     c.textBaseline = 'alphabetic';
     let minX = W, maxX = 0;
     for (const linha of linhas) {
@@ -696,7 +713,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       for (let k = 0; k < 2600; k++) { const px = rnd() * W, py = rnd() * H, l = 6 + rnd() * 14; c.beginPath(); c.moveTo(px, py); c.lineTo(px + l, py - l * 0.6); c.stroke(); }
       c.restore();
     }
-    const topo = (H - alturaTxt) / 2 - H * 0.02;
+    const topo = centro - alturaTxt / 2;
     fishEye(c, minX - size * 0.6, topo - size * 0.6, maxX - minX + size * 1.2, alturaTxt + size * 1.2, fe);
 
     ctx.save();
@@ -725,7 +742,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       larguraAt = ctx.measureText(txtAt).width;
     }
     let deslocaAt = 0;
-    if (o.logo && o.logo.img && o.logo.pos && o.logo.pos !== 'nenhum') {
+    if (o.fundoImg && o.fundoComMarca) { txtAt = ''; } // o fundo já traz a logo e o @
+    else if (o.logo && o.logo.img && o.logo.pos && o.logo.pos !== 'nenhum') {
       const r = posLogo(o.logo, W, H, { as, baseAt, xAt, larguraAt, align: st.align, margem });
       if (o.logo.pos === 'lado' && st.align !== 'left') deslocaAt = (r.w + as * 0.4) / 2;
       ctx.drawImage(o.logo.img, r.x, r.y, r.w, r.h); // logo original do Ronan, sem alterar
@@ -780,12 +798,17 @@ $('texto').value = salvo.texto || ''; $('legenda').value = salvo.legenda || '';
 $('estilo').onchange = () => { $('fishEye').value = Render.ESTILOS[$('estilo').value].fishEye; desenharTudo(); };
 
 const cards = () => Frases.dividirLote($('texto').value);
-const opcoes = (texto, grande) => ({ texto, estilo: $('estilo').value, formato: $('formato').value, arroba: perfil().arroba, fishEye: +$('fishEye').value, escala: +$('escala').value, logo: { img: perfil().logo && !perfil().semLogo ? LOGO : null, pos: $('logoPos').value, tam: 0.04 }, _grande: grande });
+// Fundos prontos (só no site): já trazem logo e @, o texto fica branco/preto sozinho
+let FUNDOS = [], fundoInicio = Math.floor(Math.random() * 1000);
+const imgsFundo = {};
+const fundoDe = (i) => { if (!$('usarFundos').checked || !FUNDOS.length) return null; const n = FUNDOS[(i + fundoInicio) % FUNDOS.length]; if (!imgsFundo[n]) { const im = new Image(); im.onload = () => desenharTudo(); im.src = 'fundos/' + n; imgsFundo[n] = im; } return imgsFundo[n].complete && imgsFundo[n].naturalWidth ? imgsFundo[n] : null; };
+fetch('fundos.json').then((r) => r.json()).then((l) => { FUNDOS = l; $('fundosBox').hidden = !l.length; }).catch(() => {});
+const opcoes = (texto, grande, i = 0) => ({ fundoImg: fundoDe(i), fundoComMarca: true, texto, estilo: $('estilo').value, formato: $('formato').value, arroba: perfil().arroba, fishEye: +$('fishEye').value, escala: +$('escala').value, logo: { img: perfil().logo && !perfil().semLogo ? LOGO : null, pos: $('logoPos').value, tam: 0.04 }, _grande: grande });
 // Prévia em meia resolução (rápido no celular); download sempre em resolução cheia.
 const FORMATOS_CHEIOS = { ...Render.FORMATOS };
-function desenhar(canvas, texto, grande) {
+function desenhar(canvas, texto, grande, i = 0) {
   for (const [k, [w, h]] of Object.entries(FORMATOS_CHEIOS)) Render.FORMATOS[k] = grande ? [w, h] : [w / 2, h / 2];
-  Render.desenhar(canvas, opcoes(texto, grande));
+  Render.desenhar(canvas, opcoes(texto, grande, i));
   return canvas;
 }
 let timer;
@@ -798,14 +821,14 @@ function desenharTudo() {
     lista.forEach((t, i) => {
       let c = box.children[i];
       if (!c) { c = document.createElement('canvas'); c.onclick = () => abrirZoom(i); box.appendChild(c); }
-      desenhar(c, t, false);
+      desenhar(c, t, false, i);
     });
     status(lista.length ? `${lista.length} cards prontos. Toque num card pra ver em tamanho real.` : 'Gere um post pra começar.');
     $('baixarTudo').textContent = lista.length ? `⬇ Baixar as ${lista.length} imagens` : '⬇ Baixar todas as imagens';
     gravar();
   }, 150);
 }
-['formato', 'fishEye', 'escala', 'logoPos'].forEach((k) => { $(k).oninput = desenharTudo; });
+['formato', 'fishEye', 'escala', 'logoPos', 'usarFundos'].forEach((k) => { $(k).oninput = desenharTudo; });
 $('texto').oninput = desenharTudo;
 $('legenda').oninput = gravar;
 
@@ -841,7 +864,7 @@ $('gerar').onclick = async () => {
       julgado = prontas.length > 0;
     } catch (e) { status(e.code === 'not_granted' ? 'IA não liberada: usei as frases virais e o banco.' : 'A IA não respondeu agora: usei as frases virais e o banco.'); }
   }
-  const lote = Frases.gerarLote({ tom, tipo: $('tipo').value, qtd, capa: $('capa').value, ctaTipo: $('ctaTipo').value, ctaLugar: $('ctaLugar').value, prontas: julgado ? prontas : misturarVirais(prontas, tom, tema, qtd) }, Math.random, usadas);
+  const lote = Frases.gerarLote({ tom, tipo: $('tipo').value, qtd, capa: $('capa').value, ctaTipo: $('ctaTipo').value, ctaLugar: $('ctaLugar').value, tema, prontas: julgado ? prontas : misturarVirais(prontas, tom, tema, qtd) }, Math.random, usadas);
   lote.forEach((f) => usadas.add(f));
   $('texto').value = lote.join('\n---\n');
   $('legenda').value = Frases.gerarLegenda(tom, perfil().arroba);
@@ -853,7 +876,7 @@ let downloads = null;
 usar('downloads').then((d) => { downloads = d; }); // no Claude: confirmação do Claude; fora dele: compartilhar/baixar do navegador
 // Um canvas só, reaproveitado e liberado: no celular, muitos canvas grandes ao mesmo tempo fazem o navegador baixar a qualidade
 const telaExport = document.createElement('canvas');
-const pngDe = (texto) => new Promise((ok) => desenhar(telaExport, texto, true).toBlob((b) => { telaExport.width = telaExport.height = 1; ok(b); }, 'image/png'));
+const pngDe = (texto, i = 0) => new Promise((ok) => desenhar(telaExport, texto, true, i).toBlob((b) => { telaExport.width = telaExport.height = 1; ok(b); }, 'image/png'));
 // Fora do Claude: abre o "compartilhar" do celular (salvar na galeria, Instagram...) ou baixa direto
 async function compartilhar(arquivos, texto) {
   if (navigator.canShare?.({ files: arquivos })) {
@@ -877,7 +900,7 @@ $('canvaCel').onclick = async () => {
   const lista = cards(); if (!lista.length) return status('Gere um post primeiro.');
   status('Montando as imagens…');
   const pngs = [];
-  for (let i = 0; i < lista.length; i++) pngs.push(new File([await pngDe(lista[i])], String(i + 1).padStart(2, '0') + '.png', { type: 'image/png' }));
+  for (let i = 0; i < lista.length; i++) pngs.push(new File([await pngDe(lista[i], i)], String(i + 1).padStart(2, '0') + '.png', { type: 'image/png' }));
   if (await compartilhar(pngs, $('legenda').value)) return status('Escolha o Canva na lista. As imagens vão na ordem certa.');
   for (const f of pngs) { if (downloads) await salvar(f.name, f); else { baixarDireto(f.name, f); await new Promise((r) => setTimeout(r, 700)); } }
   status('Imagens salvas. Abra o Canva e envie as imagens da galeria (já estão em ordem).');
@@ -886,7 +909,7 @@ $('baixarTudo').onclick = async () => {
   const lista = cards(); if (!lista.length) return status('Gere um post primeiro.');
   status('Montando os cards em tamanho real…');
   const pngs = [];
-  for (let i = 0; i < lista.length; i++) pngs.push(new File([await pngDe(lista[i])], String(i + 1).padStart(2, '0') + '.png', { type: 'image/png' }));
+  for (let i = 0; i < lista.length; i++) pngs.push(new File([await pngDe(lista[i], i)], String(i + 1).padStart(2, '0') + '.png', { type: 'image/png' }));
   if (!downloads && (await compartilhar(pngs, $('legenda').value))) return; // celular: manda os cards em ordem pra galeria/Instagram
   // Sem zip: cada card sai solto, em ordem (01, 02, 03...)
   for (const f of pngs) {
@@ -898,10 +921,10 @@ $('baixarTudo').onclick = async () => {
 let zoomIdx = 0;
 async function abrirZoom(i) {
   zoomIdx = i; $('zoom').hidden = false;
-  $('zoomImg').src = URL.createObjectURL(await pngDe(cards()[i]));
+  $('zoomImg').src = URL.createObjectURL(await pngDe(cards()[i], i));
 }
 $('zoomFechar').onclick = () => { $('zoom').hidden = true; };
-$('zoomBaixar').onclick = async () => salvar(String(zoomIdx + 1).padStart(2, '0') + '.png', await pngDe(cards()[zoomIdx]));
+$('zoomBaixar').onclick = async () => salvar(String(zoomIdx + 1).padStart(2, '0') + '.png', await pngDe(cards()[zoomIdx], zoomIdx));
 $('copiar').onclick = () => { navigator.clipboard.writeText($('legenda').value).then(() => status('Legenda copiada.'), () => { $('legenda').select(); status('Selecione e copie a legenda.'); }); };
 
 function mostrarPerfil() {
